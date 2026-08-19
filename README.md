@@ -56,7 +56,7 @@ audio jako MP3) i "Pobierz". Część filmów z Facebooka wymaga bycia zalogowan
 zaznacz "Użyj ciasteczek z przeglądarki" i wybierz, z której (Chrome/Edge/Firefox/...),
 żeby yt-dlp użyło Twojej aktywnej sesji zamiast pytać o hasło. **Uwaga:** pobieranie
 z tych serwisów łamie ich regulaminy nawet do użytku prywatnego - to Twoja decyzja,
-czy i co pobierasz.
+czy i co pobierasz.(aktualnie filmiki z yt mogą być pobieranie z maksymalną rozdzielczością 360p) 
 
 Jeśli w polu "Plik wyjściowy" wpiszesz samą nazwę (bez folderu), program zapisze
 wynik w ostatnio używanym folderze, a jeśli żadnego jeszcze nie było - na Pulpicie.
