@@ -26,6 +26,21 @@ from tkinterdnd2 import DND_FILES, TkinterDnD
 from converters import images, media, documents, data as data_mod, archives, download as download_mod
 from convert import do_convert, output_format_options
 
+
+def _bootstrap_bundled_path():
+    """Gdy uruchomione jako spakowany .exe (PyInstaller), dokłada folder obok
+    programu na początek PATH - to tam ląduje dołączony ffmpeg/ffprobe (patrz
+    build_release.py). Bez tego shutil.which("ffmpeg") w converters/ nic by nie
+    znalazł i spakowana wersja wymagałaby ręcznie zainstalowanego ffmpeg tak
+    samo jak uruchomienie z kodu źródłowego - a to przekreślałoby sens
+    pakowania "jedna paczka, od razu działa"."""
+    if getattr(sys, "frozen", False):
+        bundled_dir = getattr(sys, "_MEIPASS", None) or os.path.dirname(sys.executable)
+        os.environ["PATH"] = bundled_dir + os.pathsep + os.environ.get("PATH", "")
+
+
+_bootstrap_bundled_path()
+
 ctk.set_appearance_mode("dark")
 ctk.set_default_color_theme("blue")
 

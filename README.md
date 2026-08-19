@@ -4,6 +4,31 @@ Jeden lokalny toolkit zamiast szukania "convert X to Y online" za każdym
 razem. Wszystko działa offline, bez wgrywania plików na obcy serwer, bez
 reklam, limitów rozmiaru czy znaków wodnych.
 
+## Gotowa paczka (Windows, bez instalowania Pythona)
+
+Najprostszy start: pobierz `local_converter-windows.zip` z [Releases](../../releases),
+rozpakuj i uruchom `local_converter.exe` - GUI działa od razu, bez instalowania
+Pythona ani żadnych bibliotek. ffmpeg/ffprobe są dołączone w paczce, więc
+konwersje audio/wideo i pobieranie z linków też działają od razu.
+
+Czego paczka NIE zawiera (bo są zbyt duże/ciężkie, żeby sensownie je dołączyć) -
+te funkcje działają dopiero po doinstalowaniu odpowiedniego programu osobno
+(patrz sekcja Instalacja niżej): podgląd/odtwarzanie w zakładce Trim (VLC),
+DOCX → PDF (LibreOffice), OCR skanów PDF (Tesseract + Poppler). Reszta toolkita
+działa od razu po rozpakowaniu.
+
+Chcesz zbudować paczkę samodzielnie (np. po własnych zmianach w kodzie)?
+
+```bash
+pip install -r requirements.txt pyinstaller
+python build_release.py
+```
+
+Wynik: `dist/local_converter/` (folder gotowy do uruchomienia) i
+`local_converter-windows.zip` (ten sam folder spakowany do rozdania dalej).
+
+## CLI
+
 ```bash
 python convert.py convert zdjecie.jpg zdjecie.png
 python convert.py convert piosenka.mp3 piosenka.wav

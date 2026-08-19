@@ -7,3 +7,10 @@ __pycache__/
 # Klonowana lokalnie w trakcie eksperymentu z PO Token (wyprobowane, bez zysku
 # w jakosci - patrz README) - gdyby ktos kiedys wrocil do tego pomyslu.
 bgutil-ytdlp-pot-provider/
+
+# Wyniki build_release.py (PyInstaller) - duze binarki, nie naleza do repo.
+# Gotowa paczka trafia do GitHub Releases zamiast do historii gita.
+build/
+dist/
+*.spec
+local_converter-windows.zip
