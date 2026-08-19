@@ -1,0 +1,32 @@
+Pillow
+pypdf
+pdf2docx
+openpyxl
+pyyaml
+pytesseract
+pdf2image
+customtkinter
+tkinterdnd2
+python-vlc
+yt-dlp
+
+# Powyższe instalujesz przez: pip install -r requirements.txt
+# customtkinter, tkinterdnd2 i python-vlc są potrzebne tylko do GUI (gui.py) -
+# CLI (convert.py) ich nie wymaga.
+#
+# python-vlc dodatkowo wymaga zainstalowanego (darmowego) VLC media playera
+# w systemie (sam plik biblioteki, nie trzeba go uruchamiać):
+#   Windows -> winget install VideoLAN.VLC (albo https://www.videolan.org/vlc/)
+#   macOS   -> brew install --cask vlc
+#   Linux   -> sudo apt install vlc
+#
+# yt-dlp: pobieranie z linków (YouTube, Facebook i inne serwisy, które yt-dlp
+# wspiera) - używane też przez ffmpeg (merge wideo+audio, wyciąganie MP3),
+# więc wymaga tego samego ffmpeg co konwersje audio/wideo poniżej.
+#
+# Poniższe to programy systemowe (NIE instaluje ich pip) - wymagane
+# tylko jeśli korzystasz z odpowiedniej funkcji. Instrukcje w README.md:
+#   ffmpeg        -> convert/trim/to-gif/normalize-audio/compress-video (audio, wideo), download
+#   libreoffice   -> convert docx -> pdf
+#   tesseract-ocr -> ocr-pdf
+#   poppler-utils -> ocr-pdf (pdf2image z niego korzysta)

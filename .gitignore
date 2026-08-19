@@ -1,0 +1,9 @@
+__pycache__/
+*.pyc
+*.pyo
+.claude/settings.local.json
+*.log
+
+# Klonowana lokalnie w trakcie eksperymentu z PO Token (wyprobowane, bez zysku
+# w jakosci - patrz README) - gdyby ktos kiedys wrocil do tego pomyslu.
+bgutil-ytdlp-pot-provider/
