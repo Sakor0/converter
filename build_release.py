@@ -13,7 +13,10 @@ dokladnie tak jak przy uruchomieniu z kodu zrodlowego (patrz README.md).
 Uzycie:
     python build_release.py
 Wynik:
-    dist/local_converter/          <- folder z local_converter.exe i zaleznosciami
+    dist/local_converter/          <- folder z local_converter.exe i zaleznosciami,
+                                       plus "Utworz skrot na Pulpicie.bat" (klika
+                                       sie raz po rozpakowaniu, zeby dostac ikonke
+                                       na Pulpicie zamiast grzebania w folderze)
     local_converter-windows.zip    <- ten sam folder spakowany do pobrania
 """
 
@@ -65,6 +68,12 @@ def main():
     subprocess.run(cmd, check=True, cwd=ROOT)
 
     dist_dir = os.path.join(ROOT, "dist", "local_converter")
+
+    shortcut_script = os.path.join(ROOT, "assets", "create_desktop_shortcut.bat")
+    shortcut_dest = os.path.join(dist_dir, "Utworz skrot na Pulpicie.bat")
+    shutil.copyfile(shortcut_script, shortcut_dest)
+    print(f"Dolaczono {shortcut_dest}")
+
     zip_path = os.path.join(ROOT, "local_converter-windows.zip")
     if os.path.isfile(zip_path):
         os.remove(zip_path)

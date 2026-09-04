@@ -13,6 +13,11 @@ rozpakuj i uruchom `local_converter.exe` - GUI działa od razu, bez instalowania
 Pythona ani żadnych bibliotek. ffmpeg/ffprobe są dołączone w paczce, więc
 konwersje audio/wideo i pobieranie z linków też działają od razu.
 
+Chcesz uruchamiać go potem jednym kliknięciem z Pulpitu zamiast wchodzić za
+każdym razem do rozpakowanego folderu? W tym samym folderze jest
+**"Utworz skrot na Pulpicie.bat"** - kliknij go raz, a na Pulpicie pojawi się
+skrót do `local_converter.exe` z tą samą ikonką.
+
 Czego paczka NIE zawiera (bo są zbyt duże/ciężkie, żeby sensownie je dołączyć) -
 te funkcje działają dopiero po doinstalowaniu odpowiedniego programu osobno
 (patrz sekcja Instalacja niżej): podgląd/odtwarzanie w zakładce Trim (VLC),
