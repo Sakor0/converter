@@ -201,3 +201,10 @@ documents.py, data.py, archives.py) z prostymi funkcjami `(input, output, ...)`.
 Żeby dodać nowy format czy operację, dopisz funkcję w odpowiednim module i
 podłącz ją w `convert.py` (albo w `cmd_convert`, albo jako nową podkomendę
 w `build_parser()`).
+
+## Licencja
+
+[PolyForm Noncommercial 1.0.0](LICENSE) - w skrócie: używaj, kopiuj, modyfikuj
+i udostępniaj dalej za darmo do dowolnego celu niekomercyjnego (użytek osobisty,
+nauka, hobby). Wykorzystanie komercyjne (sprzedaż, rebranding, wbudowanie
+w płatny produkt/usługę) wymaga osobnej zgody - napisz, jeśli o to chodzi.
