@@ -52,6 +52,11 @@ def main():
         "--collect-all", "tkinterdnd2",
         "--add-binary", f"{ffmpeg};.",
         "--add-binary", f"{ffprobe};.",
+        "--icon", os.path.join(ROOT, "assets", "icon.ico"),
+        # Dołączone też jako zwykły plik danych (nie tylko ikona .exe) - to stąd
+        # gui.py bierze ikonę okna/paska zadań w trakcie działania (patrz
+        # _resource_path w gui.py).
+        "--add-data", os.path.join(ROOT, "assets", "icon.ico") + ";assets",
         "--distpath", os.path.join(ROOT, "dist"),
         "--workpath", os.path.join(ROOT, "build"),
         "--specpath", ROOT,

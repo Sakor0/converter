@@ -41,6 +41,18 @@ def _bootstrap_bundled_path():
 
 _bootstrap_bundled_path()
 
+
+def _resource_path(*parts):
+    """Ścieżka do pliku w assets/ - działa zarówno uruchomione z kodu
+    źródłowego (względem tego pliku), jak i ze spakowanego .exe (względem
+    folderu z dołączonymi danymi, patrz _bootstrap_bundled_path)."""
+    if getattr(sys, "frozen", False):
+        base = getattr(sys, "_MEIPASS", None) or os.path.dirname(sys.executable)
+    else:
+        base = os.path.dirname(os.path.abspath(__file__))
+    return os.path.join(base, *parts)
+
+
 ctk.set_appearance_mode("dark")
 ctk.set_default_color_theme("blue")
 
@@ -624,6 +636,10 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
         super().__init__()
         self.TkdndVersion = TkinterDnD._require(self)
         self.title("local_converter")
+        try:
+            self.iconbitmap(_resource_path("assets", "icon.ico"))
+        except Exception:
+            pass
         self.geometry("920x680")
         self.minsize(820, 600)
 
