@@ -1,3 +1,5 @@
+<p align="center"><img src="assets/icon.png" width="120" alt="local_converter"></p>
+
 # local_converter
 
 Jeden lokalny toolkit zamiast szukania "convert X to Y online" za każdym
