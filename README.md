@@ -69,6 +69,15 @@ pip install -r requirements.txt
 python gui.py
 ```
 
+Interfejs jest dwujęzyczny - przełącznik **PL/EN** na górze panelu bocznego
+zmienia język całego okna od razu, bez zamykania i ponownego uruchamiania
+programu (trwające pobieranie/konwersja w tle nie są przerywane).
+
+Zakładka **Audio / Wideo → Wideo → MP3** wyciąga samą ścieżkę dźwiękową jako
+MP3 z dowolnego pliku wideo/audio, opcjonalnie tylko z wybranego fragmentu
+(pola Początek/Koniec można zostawić puste, żeby wziąć cały plik) - szybszy
+sposób niż osobno konwertować i przycinać, kiedy zależy Ci tylko na dźwięku.
+
 Zakładka **Audio / Wideo → Przytnij (Trim)** pozwala wskazać plik MP3/MP4 (i inne
 formaty audio/wideo). Program automatycznie odczytuje długość pliku (ffprobe) i
 rysuje przebieg fali dźwiękowej (jak w DaVinci Resolve i podobnych programach) -
