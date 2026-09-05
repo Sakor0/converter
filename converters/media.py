@@ -174,6 +174,23 @@ def extract_audio(input_video, output_audio):
     convert(input_video, output_audio)
 
 
+def extract_audio_clip(input_path, output_path, start=None, end=None):
+    """Wyciąga ścieżkę dźwiękową (format wyjściowy wg rozszerzenia output_path,
+    np. MP3), opcjonalnie przycinając do zakresu [start, end] (jak w trim() -
+    'HH:MM:SS' albo sekundy, każdy z nich opcjonalny). W przeciwieństwie do
+    trim() zawsze przekodowuje audio (nie -c copy), więc działa też między
+    różnymi formatami (np. wideo MP4 -> MP3), nie tylko przy przycinaniu tego
+    samego formatu."""
+    _check_ffmpeg()
+    cmd = ["ffmpeg", "-y", "-i", input_path]
+    if start is not None:
+        cmd += ["-ss", str(start)]
+    if end is not None:
+        cmd += ["-to", str(end)]
+    cmd += ["-vn", output_path]
+    _run(cmd)
+
+
 def to_gif(input_video, output_gif, fps=10, width=480):
     """Konwertuje fragment/całość wideo na animowany GIF."""
     _check_ffmpeg()
