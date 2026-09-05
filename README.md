@@ -8,21 +8,25 @@ reklam, limitów rozmiaru czy znaków wodnych.
 
 ## Gotowa paczka (Windows, bez instalowania Pythona)
 
-Najprostszy start: pobierz `local_converter-windows.zip` z [Releases](../../releases),
-rozpakuj i uruchom `local_converter.exe` - GUI działa od razu, bez instalowania
-Pythona ani żadnych bibliotek. ffmpeg/ffprobe są dołączone w paczce, więc
-konwersje audio/wideo i pobieranie z linków też działają od razu.
+Zero Pythona, zero bibliotek do instalowania - pobierz z [Releases](../../releases)
+jedną z dwóch wersji:
 
-Chcesz uruchamiać go potem jednym kliknięciem z Pulpitu zamiast wchodzić za
-każdym razem do rozpakowanego folderu? W tym samym folderze jest
-**"Utworz skrot na Pulpicie.bat"** - kliknij go raz, a na Pulpicie pojawi się
-skrót do `local_converter.exe` z tą samą ikonką.
+- **`local_converter-setup.exe`** (zalecane) - zwykły instalator: Dalej, Dalej,
+  Zainstaluj. Dodaje wpis w Menu Start, opcjonalny skrót na Pulpicie (zaznacz
+  checkbox w trakcie instalacji) i odinstalowywanie przez "Aplikacje i funkcje" -
+  jak każdy normalny program.
+- **`local_converter-windows.zip`** (wersja przenośna) - bez instalowania:
+  rozpakuj folder i uruchom `local_converter.exe` stamtąd (np. na pendrive, albo
+  jeśli nie chcesz niczego "instalować" w systemie). W tym samym folderze jest
+  **"Utworz skrot na Pulpicie.bat"** - kliknij go raz, żeby dostać skrót na
+  Pulpicie zamiast wchodzić za każdym razem do rozpakowanego folderu.
 
-Czego paczka NIE zawiera (bo są zbyt duże/ciężkie, żeby sensownie je dołączyć) -
-te funkcje działają dopiero po doinstalowaniu odpowiedniego programu osobno
-(patrz sekcja Instalacja niżej): podgląd/odtwarzanie w zakładce Trim (VLC),
-DOCX → PDF (LibreOffice), OCR skanów PDF (Tesseract + Poppler). Reszta toolkita
-działa od razu po rozpakowaniu.
+Obie wersje mają dołączone ffmpeg/ffprobe, więc konwersje audio/wideo i
+pobieranie z linków działają od razu. Czego NIE zawierają (bo są zbyt
+duże/ciężkie, żeby sensownie je dołączyć) - te funkcje działają dopiero po
+doinstalowaniu odpowiedniego programu osobno (patrz sekcja Instalacja niżej):
+podgląd/odtwarzanie w zakładce Trim (VLC), DOCX → PDF (LibreOffice), OCR
+skanów PDF (Tesseract + Poppler). Reszta toolkita działa od razu.
 
 Chcesz zbudować paczkę samodzielnie (np. po własnych zmianach w kodzie)?
 
@@ -33,6 +37,16 @@ python build_release.py
 
 Wynik: `dist/local_converter/` (folder gotowy do uruchomienia) i
 `local_converter-windows.zip` (ten sam folder spakowany do rozdania dalej).
+
+Instalator wymaga dodatkowo [Inno Setup 6](https://jrsoftware.org/isinfo.php)
+(`winget install JRSoftware.InnoSetup`) i musi być budowany PO `build_release.py`
+(korzysta z jego wyniku w `dist/`):
+
+```bash
+& "$env:LOCALAPPDATA\Programs\Inno Setup 6\ISCC.exe" assets\installer.iss
+```
+
+Wynik: `dist_installer/local_converter-setup.exe`.
 
 ## CLI
 

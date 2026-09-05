@@ -8,9 +8,11 @@ __pycache__/
 # w jakosci - patrz README) - gdyby ktos kiedys wrocil do tego pomyslu.
 bgutil-ytdlp-pot-provider/
 
-# Wyniki build_release.py (PyInstaller) - duze binarki, nie naleza do repo.
-# Gotowa paczka trafia do GitHub Releases zamiast do historii gita.
+# Wyniki build_release.py (PyInstaller) i assets/installer.iss (Inno Setup) -
+# duze binarki, nie naleza do repo. Gotowa paczka trafia do GitHub Releases
+# zamiast do historii gita.
 build/
 dist/
+dist_installer/
 *.spec
 local_converter-windows.zip
