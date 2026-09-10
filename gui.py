@@ -323,7 +323,20 @@ class FileListBox(ctk.CTkFrame):
             self.on_change()
 
     def _add_files(self):
-        self._insert_paths(filedialog.askopenfilenames(filetypes=self.filetypes))
+        paths = filedialog.askopenfilenames(filetypes=self.filetypes)
+        # Gdy user wybierze w oknie systemowym DOKŁADNIE jeden plik, Tk/Tcl na
+        # części systemów zwraca go jako goły string (cała, dosłowna ścieżka,
+        # niezakodowana jak lista Tcl) zamiast 1-elementowej krotki - a
+        # iterowanie po takim stringu (patrz _insert_paths) leci znak po
+        # znaku, więc zamiast jednej ścieżki na liście ląduje kilkanaście
+        # "plików" będących pojedynczymi literami. Skoro to ZAWSZE dokładnie
+        # jeden plik w tym przypadku, cały string to ta jedna ścieżka - nie
+        # próbujemy jej dalej dzielić (np. self.tk.splitlist rozjeżdża się
+        # akurat na ścieżkach ze spacją w nazwie, bo to zwykły string, nie
+        # naprawdę zakodowana lista Tcl).
+        if isinstance(paths, str):
+            paths = (paths,) if paths else ()
+        self._insert_paths(paths)
 
     def _add_folder(self):
         path = filedialog.askdirectory()
