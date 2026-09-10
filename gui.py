@@ -80,10 +80,16 @@ def _save_settings(settings):
 
 
 def get_default_save_dir():
-    """Ostatnio użyty folder zapisu (zapamiętany trwale), a jeśli go nie ma - Pulpit."""
+    """Ostatnio użyty folder zapisu (zapamiętany trwale), a jeśli jeszcze
+    żadnego nie było - folder Pobrane (jako naturalny punkt startowy dla
+    plików ściąganych/konwertowanych), potem Pulpit jako ostatnia deska
+    ratunku."""
     last_dir = _load_settings().get("last_output_dir")
     if last_dir and os.path.isdir(last_dir):
         return last_dir
+    downloads = os.path.join(os.path.expanduser("~"), "Downloads")
+    if os.path.isdir(downloads):
+        return downloads
     desktop = os.path.join(os.path.expanduser("~"), "Desktop")
     return desktop if os.path.isdir(desktop) else os.path.expanduser("~")
 
@@ -102,8 +108,14 @@ def ext_of(path):
 
 
 def suggest_output(input_path, suffix="_wynik", new_ext=None):
-    base, ext = os.path.splitext(input_path)
-    return f"{base}{suffix}{new_ext or ext}"
+    """Podpowiedź nazwy pliku wyjściowego - w domyślnym/ostatnio używanym
+    folderze zapisu (get_default_save_dir()), NIE obok pliku wejściowego.
+    Inaczej wybranie pliku wejściowego z innego folderu niż zwykle (np. z
+    Pobranych, z Pulpitu, z gdziekolwiek) przy okazji po cichu przestawiało
+    "ostatnio używany folder zapisu" na ten folder (patrz resolve_output_path),
+    więc trzeba było za każdym razem ręcznie poprawiać miejsce zapisu."""
+    base_name, orig_ext = os.path.splitext(os.path.basename(input_path))
+    return os.path.join(get_default_save_dir(), f"{base_name}{suffix}{new_ext or orig_ext}")
 
 
 _INVALID_FILENAME_CHARS = '\\/:*?"<>|'
@@ -221,11 +233,22 @@ def enable_file_drop(widget, on_paths, single=True):
 
 
 def browse_save(entry, defaultextension="", filetypes=None, initialfile=""):
+    # Pole zwykle ma już podpowiedzianą nazwę (suggest_output/fill_output_name) -
+    # otwieramy okno Zapisz jako z TĄ nazwą wpisaną, żeby użytkownik mógł ją
+    # od razu poprawić/dopisać, zamiast zaczynać pisanie nazwy od zera za
+    # każdym razem, kiedy tylko chce wskazać/potwierdzić folder zapisu.
+    current = entry.get().strip()
+    initial_dir = get_default_save_dir()
+    if not initialfile and current:
+        initialfile = os.path.basename(current)
+        if os.path.isabs(current):
+            initial_dir = os.path.dirname(current) or initial_dir
+
     path = filedialog.asksaveasfilename(
         defaultextension=defaultextension,
         filetypes=filetypes or [(t("Wszystkie pliki"), "*.*")],
         initialfile=initialfile,
-        initialdir=get_default_save_dir(),
+        initialdir=initial_dir,
     )
     if path:
         entry.delete(0, "end")
