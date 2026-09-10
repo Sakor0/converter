@@ -26,6 +26,7 @@ from tkinterdnd2 import DND_FILES, TkinterDnD
 from converters import images, media, documents, data as data_mod, archives, download as download_mod
 from convert import do_convert, output_format_options
 from translations import t, get_language, set_language
+from notify import notify
 
 
 def _bootstrap_bundled_path():
@@ -264,6 +265,14 @@ def browse_dir(entry):
         set_last_output_dir(path)
 
 
+def log_and_notify(app, output_path, notify_title):
+    """Log + powiadomienie systemowe po zakończeniu pojedynczej (nie partii -
+    patrz run_batch_async) operacji, na tyle wolnej, że warto o niej wiedzieć
+    nawet gdy okno jest w tle (przycinanie/OCR/dzielenie PDF/pobieranie)."""
+    app.log(f"{t('Zapisano:')} {output_path}")
+    notify(notify_title, os.path.basename(output_path))
+
+
 def labeled_row(parent, row, label_text):
     ctk.CTkLabel(parent, text=t(label_text)).grid(row=row, column=0, sticky="w", padx=(0, 10), pady=6)
 
@@ -272,9 +281,10 @@ def labeled_row(parent, row, label_text):
 class FileListBox(ctk.CTkFrame):
     """Lista wielu plików (i opcjonalnie folderów) z dodawaniem/usuwaniem/kolejnością."""
 
-    def __init__(self, master, filetypes=None, allow_folders=False, height=6):
+    def __init__(self, master, filetypes=None, allow_folders=False, height=6, on_change=None):
         super().__init__(master, fg_color="transparent")
         self.filetypes = filetypes or [(t("Wszystkie pliki"), "*.*")]
+        self.on_change = on_change
         self.grid_columnconfigure(0, weight=1)
         self.grid_rowconfigure(0, weight=1)
 
@@ -309,6 +319,8 @@ class FileListBox(ctk.CTkFrame):
     def _insert_paths(self, paths):
         for p in paths:
             self.listbox.insert("end", p)
+        if paths and self.on_change:
+            self.on_change()
 
     def _add_files(self):
         self._insert_paths(filedialog.askopenfilenames(filetypes=self.filetypes))
@@ -321,9 +333,13 @@ class FileListBox(ctk.CTkFrame):
     def _remove_selected(self):
         for i in reversed(self.listbox.curselection()):
             self.listbox.delete(i)
+        if self.on_change:
+            self.on_change()
 
     def _clear(self):
         self.listbox.delete(0, "end")
+        if self.on_change:
+            self.on_change()
 
     def _move_up(self):
         for i in list(self.listbox.curselection()):
@@ -834,13 +850,29 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
         self.log_box.configure(state="disabled")
         self.status_label.configure(text=msg)
 
+    # ------------------------------------------------------------ progress
+    def set_progress(self, value=None):
+        """value=None -> pasek "nie wiadomo ile to potrwa" (animowana kreska,
+        np. pojedyncza szybka konwersja). value w [0, 1] -> realny procent
+        (np. i/n plików w partii, albo bajty pobrane/łącznie przy pobieraniu) -
+        pasek przełącza się wtedy w tryb "determinate" zamiast tylko migać."""
+        if value is None:
+            if self.progress.cget("mode") != "indeterminate":
+                self.progress.configure(mode="indeterminate")
+            self.progress.start()
+        else:
+            if self.progress.cget("mode") != "determinate":
+                self.progress.stop()
+                self.progress.configure(mode="determinate")
+            self.progress.set(max(0.0, min(1.0, value)))
+
     # ------------------------------------------------------------- runner
     def run_async(self, fn, trigger_button=None, on_success=None, busy_text=None,
                   silent_errors=False):
         if trigger_button:
             trigger_button.configure(state="disabled")
         self.status_dot.configure(text_color=self._DOT_BUSY)
-        self.progress.start()
+        self.set_progress(None)
         self.log(busy_text or t("Przetwarzanie..."))
 
         def worker():
@@ -877,6 +909,63 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
             if on_success:
                 on_success(result)
 
+    # ------------------------------------------------------- batch runner
+    def run_batch_async(self, input_paths, job_fn, trigger_button=None, busy_text=None,
+                         notify_title=None):
+        """Jak run_async, ale dla wielu plików naraz: job_fn(input_path) robi
+        JEDNĄ konwersję i zwraca ścieżkę wyniku. Błąd pojedynczego pliku NIE
+        przerywa reszty partii - jest tylko zbierany i pokazany w podsumowaniu,
+        żeby jeden zepsuty plik na liście nie zmarnował konwersji pozostałych
+        dziewięciu. Pasek postępu pokazuje realny procent (i/n plików), a po
+        zakończeniu leci powiadomienie systemowe (notify.py) - przydatne przy
+        dłuższej partii, gdy ktoś zdąży zminimalizować okno."""
+        if trigger_button:
+            trigger_button.configure(state="disabled")
+        self.status_dot.configure(text_color=self._DOT_BUSY)
+        self.set_progress(0.0)
+        total = len(input_paths)
+        self.log(busy_text or t("Przetwarzanie..."))
+
+        def worker():
+            ok, failed = [], []
+            for i, path in enumerate(input_paths, start=1):
+                try:
+                    out_path = job_fn(path)
+                except Exception as e:
+                    failed.append((path, e))
+                    self.after(0, lambda p=path, e=e, i=i: self._batch_item_done(i, total, p, error=e))
+                else:
+                    ok.append((path, out_path))
+                    self.after(0, lambda p=path, o=out_path, i=i: self._batch_item_done(i, total, p, output=o))
+            self.after(0, lambda: self._batch_finish(trigger_button, ok, failed, notify_title))
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _batch_item_done(self, i, total, input_path, output=None, error=None):
+        self.set_progress(i / total)
+        if error:
+            self.log(f"❌ {os.path.basename(input_path)}: {error}")
+        else:
+            self.log(f"✅ {t('Zapisano:')} {output}")
+
+    def _batch_finish(self, trigger_button, ok, failed, notify_title):
+        if trigger_button:
+            trigger_button.configure(state="normal")
+        self.set_progress(None)
+        self.progress.stop()
+        total = len(ok) + len(failed)
+        if failed:
+            self.status_dot.configure(text_color=self._DOT_OK if ok else self._DOT_ERROR)
+            summary = t("Gotowe: {ok}/{total} plików (błędy: {err}).").format(
+                ok=len(ok), total=total, err=len(failed))
+        else:
+            self.status_dot.configure(text_color=self._DOT_OK)
+            summary = t("Gotowe: {ok}/{total} plików.").format(ok=len(ok), total=total)
+        self.log(summary)
+        notify(notify_title or "local_converter", summary)
+        if failed and not ok:
+            messagebox.showerror(t("Błąd"), "\n".join(f"{os.path.basename(p)}: {e}" for p, e in failed[:10]))
+
 
 # =========================================================== Konwersja ====
 def build_convert_page(parent, app):
@@ -885,25 +974,49 @@ def build_convert_page(parent, app):
 
     ctk.CTkLabel(frame, text=t("Konwersja ogólna (format rozpoznawany po rozszerzeniu)"),
                  font=ctk.CTkFont(size=16, weight="bold")).grid(row=0, column=0, columnspan=3, sticky="w", pady=(0, 4))
-    ctk.CTkLabel(frame, text=t("Obrazy, audio/wideo, PDF↔DOCX, CSV/JSON/XLSX/YAML - jedna komenda."),
+    ctk.CTkLabel(frame, text=t("Obrazy, audio/wideo, PDF↔DOCX, CSV/JSON/XLSX/YAML - jedna komenda. "
+                                "Można dodać kilka plików naraz - ten sam format wyjściowy trafi do wszystkich."),
                  text_color="gray60").grid(row=1, column=0, columnspan=3, sticky="w", pady=(0, 16))
 
-    labeled_row(frame, 2, "Plik wejściowy:")
-    in_entry = ctk.CTkEntry(frame, placeholder_text=t("wybierz plik lub przeciągnij go tutaj..."))
-    in_entry.grid(row=2, column=1, sticky="ew", padx=6, pady=6)
+    # Etykiety rozwijanego menu ("PNG") <-> realne rozszerzenia (".png") - CTkOptionMenu
+    # operuje na czytelnych dla człowieka napisach, więc trzymamy mapowanie osobno
+    # zamiast wymuszać na do_convert() rozpoznawanie etykiet. Opcje liczone na
+    # podstawie PIERWSZEGO pliku na liście - przy partii plików tego samego typu
+    # (typowy przypadek) to wystarcza, plik niepasującego typu po prostu zgłosi
+    # błąd tylko dla siebie (patrz run_batch_async), reszta partii i tak przejdzie.
+    ext_by_label = {}
+
+    def refresh_format_options():
+        paths = flb.get_paths()
+        first = paths[0] if paths else None
+        options = output_format_options(first) if first else []
+        ext_by_label.clear()
+        if not options:
+            placeholder = t("(brak obsługiwanej konwersji dla tego pliku)") if first else t("- wybierz pliki wejściowe -")
+            format_menu.configure(values=[placeholder], state="disabled")
+            format_menu.set(placeholder)
+            return
+        labels = [ext.lstrip(".").upper() for ext in options]
+        ext_by_label.update(zip(labels, options))
+        format_menu.configure(values=labels, state="normal")
+        format_menu.set(labels[0])
+
+    labeled_row(frame, 2, "Pliki wejściowe:")
+    flb = FileListBox(frame, on_change=refresh_format_options)
+    flb.grid(row=2, column=1, columnspan=2, sticky="ew", padx=6, pady=6)
 
     labeled_row(frame, 3, "Format wyjściowy:")
-    format_menu = ctk.CTkOptionMenu(frame, values=[t("- wybierz plik wejściowy -")], width=160,
-                                     command=lambda choice: on_format_selected(choice))
-    format_menu.set(t("- wybierz plik wejściowy -"))
+    format_menu = ctk.CTkOptionMenu(frame, values=[t("- wybierz pliki wejściowe -")], width=160)
+    format_menu.set(t("- wybierz pliki wejściowe -"))
     format_menu.configure(state="disabled")
     format_menu.grid(row=3, column=1, sticky="w", padx=6, pady=6)
 
-    labeled_row(frame, 4, "Plik wyjściowy:")
-    out_entry = ctk.CTkEntry(frame, placeholder_text=t("nazwa uzupełni się sama po wyborze formatu wyżej"))
-    out_entry.grid(row=4, column=1, sticky="ew", padx=6, pady=6)
-    ctk.CTkButton(frame, text=t("Zapisz jako..."), width=110,
-                  command=lambda: browse_save(out_entry)).grid(row=4, column=2, pady=6)
+    labeled_row(frame, 4, "Folder wyjściowy:")
+    out_dir_e = ctk.CTkEntry(frame)
+    out_dir_e.insert(0, get_default_save_dir())
+    out_dir_e.grid(row=4, column=1, sticky="ew", padx=6, pady=6)
+    ctk.CTkButton(frame, text=t("Wybierz folder..."), width=130,
+                  command=lambda: browse_dir(out_dir_e)).grid(row=4, column=2, pady=6)
 
     labeled_row(frame, 5, "Jakość (JPG/WEBP):")
     quality_val = ctk.CTkLabel(frame, text="90")
@@ -913,62 +1026,28 @@ def build_convert_page(parent, app):
     quality_slider.grid(row=5, column=1, sticky="ew", padx=6, pady=6)
     quality_val.grid(row=5, column=2, sticky="w")
 
-    # Etykiety rozwijanego menu ("PNG") <-> realne rozszerzenia (".png") - CTkOptionMenu
-    # operuje na czytelnych dla człowieka napisach, więc trzymamy mapowanie osobno
-    # zamiast wymuszać na do_convert() rozpoznawanie etykiet.
-    ext_by_label = {}
-
-    def apply_format(input_path, ext):
-        if not input_path:
-            return
-        out_entry.delete(0, "end")
-        out_entry.insert(0, suggest_output(input_path, "_wynik", ext))
-
-    def on_format_selected(choice):
-        ext = ext_by_label.get(choice)
-        if ext:
-            apply_format(in_entry.get().strip(), ext)
-
-    def refresh_format_options(path):
-        options = output_format_options(path)
-        ext_by_label.clear()
-        if not options:
-            no_options = t("(brak obsługiwanej konwersji dla tego pliku)")
-            format_menu.configure(values=[no_options], state="disabled")
-            format_menu.set(no_options)
-            return
-        labels = [ext.lstrip(".").upper() for ext in options]
-        ext_by_label.update(zip(labels, options))
-        format_menu.configure(values=labels, state="normal")
-        format_menu.set(labels[0])
-        apply_format(path, options[0])
-
-    def on_input_selected(path):
-        in_entry.delete(0, "end")
-        in_entry.insert(0, path)
-        refresh_format_options(path)
-
-    def on_browse_input():
-        path = filedialog.askopenfilename(filetypes=[(t("Wszystkie pliki"), "*.*")])
-        if path:
-            on_input_selected(path)
-
-    ctk.CTkButton(frame, text=t("Przeglądaj..."), width=110,
-                  command=on_browse_input).grid(row=2, column=2, pady=6)
-    enable_file_drop(in_entry, lambda paths: on_input_selected(paths[0]))
-
     def on_convert():
-        input_path, raw_output = in_entry.get().strip(), out_entry.get().strip()
-        if not input_path or not raw_output:
-            messagebox.showwarning(t("Brakuje danych"), t("Podaj plik wejściowy i wyjściowy."))
+        input_paths = flb.get_paths()
+        ext = ext_by_label.get(format_menu.get())
+        out_dir = out_dir_e.get().strip()
+        if not input_paths or not ext:
+            messagebox.showwarning(t("Brakuje danych"), t("Dodaj przynajmniej jeden plik i wybierz format wyjściowy."))
             return
-        output_path = resolve_output_path(raw_output)
+        if not out_dir:
+            messagebox.showwarning(t("Brakuje danych"), t("Wybierz folder wyjściowy."))
+            return
+        os.makedirs(out_dir, exist_ok=True)
+        set_last_output_dir(out_dir)
         quality = int(quality_slider.get())
-        app.log(f"{t('Konwersja')} {input_path} -> {output_path}")
-        app.run_async(lambda: do_convert(input_path, output_path, quality=quality),
-                      trigger_button=convert_btn,
-                      on_success=lambda _: app.log(f"{t('Zapisano:')} {output_path}"),
-                      busy_text=t("Konwertuję..."))
+
+        def job(input_path):
+            base = os.path.splitext(os.path.basename(input_path))[0]
+            output_path = os.path.join(out_dir, f"{base}_wynik{ext}")
+            do_convert(input_path, output_path, quality=quality)
+            return output_path
+
+        app.run_batch_async(input_paths, job, trigger_button=convert_btn,
+                             busy_text=t("Konwertuję..."), notify_title=t("Konwersja zakończona"))
 
     convert_btn = ctk.CTkButton(frame, text=t("Konwertuj"), command=on_convert)
     convert_btn.grid(row=6, column=0, sticky="w", pady=(16, 0))
@@ -981,27 +1060,13 @@ def build_images_page(parent, app):
     def build_resize(p):
         f = ctk.CTkFrame(p, fg_color="transparent")
         f.grid_columnconfigure(1, weight=1)
-        ctk.CTkLabel(f, text=t("Zmień rozmiar obrazu (proporcje zachowane, jeśli podasz tylko jeden wymiar)"),
+        ctk.CTkLabel(f, text=t("Zmień rozmiar obrazu (proporcje zachowane, jeśli podasz tylko jeden wymiar) - "
+                                "można wybrać kilka plików naraz"),
                      font=ctk.CTkFont(weight="bold")).grid(row=0, column=0, columnspan=3, sticky="w", pady=(0, 14))
 
-        labeled_row(f, 1, "Plik wejściowy:")
-        in_e = ctk.CTkEntry(f, placeholder_text=t("wybierz plik lub przeciągnij go tutaj..."))
-        in_e.grid(row=1, column=1, sticky="ew", padx=6, pady=6)
-
-        def on_input_selected(path):
-            in_e.delete(0, "end")
-            in_e.insert(0, path)
-            out_e.delete(0, "end")
-            out_e.insert(0, suggest_output(path, "_resized"))
-
-        def on_browse():
-            path = filedialog.askopenfilename(
-                filetypes=[(t("Obrazy"), "*.jpg *.jpeg *.png *.webp *.bmp *.gif *.tiff *.ico")])
-            if path:
-                on_input_selected(path)
-
-        ctk.CTkButton(f, text=t("Przeglądaj..."), width=110, command=on_browse).grid(row=1, column=2, pady=6)
-        enable_file_drop(in_e, lambda paths: on_input_selected(paths[0]))
+        labeled_row(f, 1, "Pliki wejściowe:")
+        flb = FileListBox(f, filetypes=[(t("Obrazy"), "*.jpg *.jpeg *.png *.webp *.bmp *.gif *.tiff *.ico")])
+        flb.grid(row=1, column=1, columnspan=2, sticky="ew", padx=6, pady=6)
 
         labeled_row(f, 2, "Szerokość (px):")
         w_e = ctk.CTkEntry(f, placeholder_text=t("np. 1280"))
@@ -1010,24 +1075,36 @@ def build_images_page(parent, app):
         h_e = ctk.CTkEntry(f, placeholder_text=t("zostaw puste, by zachować proporcje"))
         h_e.grid(row=3, column=1, sticky="ew", padx=6, pady=6)
 
-        labeled_row(f, 4, "Plik wyjściowy:")
-        out_e = ctk.CTkEntry(f)
-        out_e.grid(row=4, column=1, sticky="ew", padx=6, pady=6)
-        ctk.CTkButton(f, text=t("Zapisz jako..."), width=110, command=lambda: browse_save(out_e)).grid(row=4, column=2, pady=6)
+        labeled_row(f, 4, "Folder wyjściowy:")
+        out_dir_e = ctk.CTkEntry(f)
+        out_dir_e.insert(0, get_default_save_dir())
+        out_dir_e.grid(row=4, column=1, sticky="ew", padx=6, pady=6)
+        ctk.CTkButton(f, text=t("Wybierz folder..."), width=130,
+                      command=lambda: browse_dir(out_dir_e)).grid(row=4, column=2, pady=6)
 
         def on_run():
-            if not in_e.get().strip() or not out_e.get().strip():
-                messagebox.showwarning(t("Brakuje danych"), t("Podaj plik wejściowy i wyjściowy."))
+            input_paths = flb.get_paths()
+            out_dir = out_dir_e.get().strip()
+            if not input_paths or not out_dir:
+                messagebox.showwarning(t("Brakuje danych"), t("Dodaj przynajmniej jeden plik i wybierz folder wyjściowy."))
                 return
             width = int(w_e.get()) if w_e.get().strip() else None
             height = int(h_e.get()) if h_e.get().strip() else None
             if not width and not height:
                 messagebox.showwarning(t("Brakuje danych"), t("Podaj szerokość lub wysokość."))
                 return
-            output_path = resolve_output_path(out_e.get().strip())
-            app.run_async(lambda: images.resize(in_e.get().strip(), output_path, width=width, height=height),
-                          trigger_button=btn, on_success=lambda _: app.log(f"{t('Zapisano:')} {output_path}"),
-                          busy_text=t("Zmieniam rozmiar..."))
+            os.makedirs(out_dir, exist_ok=True)
+            set_last_output_dir(out_dir)
+
+            def job(input_path):
+                base = os.path.splitext(os.path.basename(input_path))[0]
+                ext = os.path.splitext(input_path)[1]
+                output_path = os.path.join(out_dir, f"{base}_resized{ext}")
+                images.resize(input_path, output_path, width=width, height=height)
+                return output_path
+
+            app.run_batch_async(input_paths, job, trigger_button=btn,
+                                 busy_text=t("Zmieniam rozmiar..."), notify_title=t("Zmiana rozmiaru zakończona"))
 
         btn = ctk.CTkButton(f, text=t("Zmień rozmiar"), command=on_run)
         btn.grid(row=5, column=0, sticky="w", pady=(14, 0))
@@ -1036,40 +1113,39 @@ def build_images_page(parent, app):
     def build_exif(p):
         f = ctk.CTkFrame(p, fg_color="transparent")
         f.grid_columnconfigure(1, weight=1)
-        ctk.CTkLabel(f, text=t("Usuń metadane EXIF (GPS, model telefonu, data) przed wysłaniem zdjęcia"),
+        ctk.CTkLabel(f, text=t("Usuń metadane EXIF (GPS, model telefonu, data) przed wysłaniem zdjęcia - "
+                                "można wybrać kilka plików naraz"),
                      font=ctk.CTkFont(weight="bold")).grid(row=0, column=0, columnspan=3, sticky="w", pady=(0, 14))
 
-        labeled_row(f, 1, "Plik wejściowy:")
-        in_e = ctk.CTkEntry(f, placeholder_text=t("wybierz plik lub przeciągnij go tutaj..."))
-        in_e.grid(row=1, column=1, sticky="ew", padx=6, pady=6)
+        labeled_row(f, 1, "Pliki wejściowe:")
+        flb = FileListBox(f, filetypes=[(t("Obrazy"), "*.jpg *.jpeg *.png *.webp *.bmp *.tiff")])
+        flb.grid(row=1, column=1, columnspan=2, sticky="ew", padx=6, pady=6)
 
-        def on_input_selected(path):
-            in_e.delete(0, "end")
-            in_e.insert(0, path)
-            out_e.delete(0, "end")
-            out_e.insert(0, suggest_output(path, "_clean"))
-
-        def on_browse():
-            path = filedialog.askopenfilename(filetypes=[(t("Obrazy"), "*.jpg *.jpeg *.png *.webp *.bmp *.tiff")])
-            if path:
-                on_input_selected(path)
-
-        ctk.CTkButton(f, text=t("Przeglądaj..."), width=110, command=on_browse).grid(row=1, column=2, pady=6)
-        enable_file_drop(in_e, lambda paths: on_input_selected(paths[0]))
-
-        labeled_row(f, 2, "Plik wyjściowy:")
-        out_e = ctk.CTkEntry(f)
-        out_e.grid(row=2, column=1, sticky="ew", padx=6, pady=6)
-        ctk.CTkButton(f, text=t("Zapisz jako..."), width=110, command=lambda: browse_save(out_e)).grid(row=2, column=2, pady=6)
+        labeled_row(f, 2, "Folder wyjściowy:")
+        out_dir_e = ctk.CTkEntry(f)
+        out_dir_e.insert(0, get_default_save_dir())
+        out_dir_e.grid(row=2, column=1, sticky="ew", padx=6, pady=6)
+        ctk.CTkButton(f, text=t("Wybierz folder..."), width=130,
+                      command=lambda: browse_dir(out_dir_e)).grid(row=2, column=2, pady=6)
 
         def on_run():
-            if not in_e.get().strip() or not out_e.get().strip():
-                messagebox.showwarning(t("Brakuje danych"), t("Podaj plik wejściowy i wyjściowy."))
+            input_paths = flb.get_paths()
+            out_dir = out_dir_e.get().strip()
+            if not input_paths or not out_dir:
+                messagebox.showwarning(t("Brakuje danych"), t("Dodaj przynajmniej jeden plik i wybierz folder wyjściowy."))
                 return
-            output_path = resolve_output_path(out_e.get().strip())
-            app.run_async(lambda: images.strip_exif(in_e.get().strip(), output_path),
-                          trigger_button=btn, on_success=lambda _: app.log(f"{t('Zapisano:')} {output_path}"),
-                          busy_text=t("Usuwam metadane..."))
+            os.makedirs(out_dir, exist_ok=True)
+            set_last_output_dir(out_dir)
+
+            def job(input_path):
+                base = os.path.splitext(os.path.basename(input_path))[0]
+                ext = os.path.splitext(input_path)[1]
+                output_path = os.path.join(out_dir, f"{base}_clean{ext}")
+                images.strip_exif(input_path, output_path)
+                return output_path
+
+            app.run_batch_async(input_paths, job, trigger_button=btn,
+                                 busy_text=t("Usuwam metadane..."), notify_title=t("Usuwanie metadanych zakończone"))
 
         btn = ctk.CTkButton(f, text=t("Usuń EXIF"), command=on_run)
         btn.grid(row=3, column=0, sticky="w", pady=(14, 0))
@@ -1553,13 +1629,13 @@ def build_media_page(parent, app):
                     i=input_path, s=start, e=end, o=output_path))
                 app.run_async(lambda: media.build_mixed_preview(input_path, gains, output_path, start=start, end=end),
                               trigger_button=trim_btn,
-                              on_success=lambda _: app.log(f"{t('Zapisano:')} {output_path}"),
+                              on_success=lambda _: log_and_notify(app, output_path, t("Przycinanie zakończone")),
                               busy_text=t("Przycinam i miksuję ścieżki (ffmpeg)..."))
             else:
                 app.log(t("Przycinanie {i} [{s} -> {e}] -> {o}").format(i=input_path, s=start, e=end, o=output_path))
                 app.run_async(lambda: media.trim(input_path, output_path, start, end),
                               trigger_button=trim_btn,
-                              on_success=lambda _: app.log(f"{t('Zapisano:')} {output_path}"),
+                              on_success=lambda _: log_and_notify(app, output_path, t("Przycinanie zakończone")),
                               busy_text=t("Przycinam plik (ffmpeg)..."))
 
         trim_btn.configure(command=on_trim)
@@ -1568,26 +1644,12 @@ def build_media_page(parent, app):
     def build_gif(p):
         f = ctk.CTkFrame(p, fg_color="transparent")
         f.grid_columnconfigure(1, weight=1)
-        ctk.CTkLabel(f, text=t("Wideo → animowany GIF"), font=ctk.CTkFont(weight="bold"))\
-            .grid(row=0, column=0, columnspan=3, sticky="w", pady=(0, 14))
+        ctk.CTkLabel(f, text=t("Wideo → animowany GIF - można wybrać kilka plików naraz"),
+                     font=ctk.CTkFont(weight="bold")).grid(row=0, column=0, columnspan=3, sticky="w", pady=(0, 14))
 
-        labeled_row(f, 1, "Plik wideo:")
-        in_e = ctk.CTkEntry(f, placeholder_text=t("wybierz plik lub przeciągnij go tutaj..."))
-        in_e.grid(row=1, column=1, sticky="ew", padx=6, pady=6)
-
-        def on_input_selected(path):
-            in_e.delete(0, "end")
-            in_e.insert(0, path)
-            out_e.delete(0, "end")
-            out_e.insert(0, suggest_output(path, "", ".gif"))
-
-        def on_browse():
-            path = filedialog.askopenfilename(filetypes=[(t("Wideo"), "*.mp4 *.avi *.mov *.webm *.mkv")])
-            if path:
-                on_input_selected(path)
-
-        ctk.CTkButton(f, text=t("Przeglądaj..."), width=110, command=on_browse).grid(row=1, column=2, pady=6)
-        enable_file_drop(in_e, lambda paths: on_input_selected(paths[0]))
+        labeled_row(f, 1, "Pliki wideo:")
+        flb = FileListBox(f, filetypes=[(t("Wideo"), "*.mp4 *.avi *.mov *.webm *.mkv")])
+        flb.grid(row=1, column=1, columnspan=2, sticky="ew", padx=6, pady=6)
 
         labeled_row(f, 2, "FPS:")
         fps_e = ctk.CTkEntry(f)
@@ -1599,21 +1661,31 @@ def build_media_page(parent, app):
         width_e.insert(0, "480")
         width_e.grid(row=3, column=1, sticky="ew", padx=6, pady=6)
 
-        labeled_row(f, 4, "Plik wyjściowy (.gif):")
-        out_e = ctk.CTkEntry(f)
-        out_e.grid(row=4, column=1, sticky="ew", padx=6, pady=6)
-        ctk.CTkButton(f, text=t("Zapisz jako..."), width=110,
-                      command=lambda: browse_save(out_e, ".gif", [("GIF", "*.gif")])).grid(row=4, column=2, pady=6)
+        labeled_row(f, 4, "Folder wyjściowy:")
+        out_dir_e = ctk.CTkEntry(f)
+        out_dir_e.insert(0, get_default_save_dir())
+        out_dir_e.grid(row=4, column=1, sticky="ew", padx=6, pady=6)
+        ctk.CTkButton(f, text=t("Wybierz folder..."), width=130,
+                      command=lambda: browse_dir(out_dir_e)).grid(row=4, column=2, pady=6)
 
         def on_run():
-            if not in_e.get().strip() or not out_e.get().strip():
-                messagebox.showwarning(t("Brakuje danych"), t("Podaj plik wejściowy i wyjściowy."))
+            input_paths = flb.get_paths()
+            out_dir = out_dir_e.get().strip()
+            if not input_paths or not out_dir:
+                messagebox.showwarning(t("Brakuje danych"), t("Dodaj przynajmniej jeden plik i wybierz folder wyjściowy."))
                 return
-            output_path = resolve_output_path(out_e.get().strip())
-            app.run_async(lambda: media.to_gif(in_e.get().strip(), output_path,
-                                                fps=int(fps_e.get() or 10), width=int(width_e.get() or 480)),
-                          trigger_button=btn, on_success=lambda _: app.log(f"{t('Zapisano:')} {output_path}"),
-                          busy_text=t("Generuję GIF..."))
+            os.makedirs(out_dir, exist_ok=True)
+            set_last_output_dir(out_dir)
+            fps, width = int(fps_e.get() or 10), int(width_e.get() or 480)
+
+            def job(input_path):
+                base = os.path.splitext(os.path.basename(input_path))[0]
+                output_path = os.path.join(out_dir, f"{base}.gif")
+                media.to_gif(input_path, output_path, fps=fps, width=width)
+                return output_path
+
+            app.run_batch_async(input_paths, job, trigger_button=btn,
+                                 busy_text=t("Generuję GIF..."), notify_title=t("Generowanie GIF-ów zakończone"))
 
         btn = ctk.CTkButton(f, text=t("Konwertuj na GIF"), command=on_run)
         btn.grid(row=5, column=0, sticky="w", pady=(14, 0))
@@ -1622,40 +1694,38 @@ def build_media_page(parent, app):
     def build_normalize(p):
         f = ctk.CTkFrame(p, fg_color="transparent")
         f.grid_columnconfigure(1, weight=1)
-        ctk.CTkLabel(f, text=t("Wyrównaj głośność nagrania (EBU R128 loudnorm)"), font=ctk.CTkFont(weight="bold"))\
-            .grid(row=0, column=0, columnspan=3, sticky="w", pady=(0, 14))
+        ctk.CTkLabel(f, text=t("Wyrównaj głośność nagrania (EBU R128 loudnorm) - można wybrać kilka plików naraz"),
+                     font=ctk.CTkFont(weight="bold")).grid(row=0, column=0, columnspan=3, sticky="w", pady=(0, 14))
 
-        labeled_row(f, 1, "Plik audio:")
-        in_e = ctk.CTkEntry(f, placeholder_text=t("wybierz plik lub przeciągnij go tutaj..."))
-        in_e.grid(row=1, column=1, sticky="ew", padx=6, pady=6)
+        labeled_row(f, 1, "Pliki audio:")
+        flb = FileListBox(f, filetypes=[(t("Audio"), "*.mp3 *.wav *.flac *.ogg *.m4a *.aac")])
+        flb.grid(row=1, column=1, columnspan=2, sticky="ew", padx=6, pady=6)
 
-        def on_input_selected(path):
-            in_e.delete(0, "end")
-            in_e.insert(0, path)
-            out_e.delete(0, "end")
-            out_e.insert(0, suggest_output(path, "_norm"))
-
-        def on_browse():
-            path = filedialog.askopenfilename(filetypes=[(t("Audio"), "*.mp3 *.wav *.flac *.ogg *.m4a *.aac")])
-            if path:
-                on_input_selected(path)
-
-        ctk.CTkButton(f, text=t("Przeglądaj..."), width=110, command=on_browse).grid(row=1, column=2, pady=6)
-        enable_file_drop(in_e, lambda paths: on_input_selected(paths[0]))
-
-        labeled_row(f, 2, "Plik wyjściowy:")
-        out_e = ctk.CTkEntry(f)
-        out_e.grid(row=2, column=1, sticky="ew", padx=6, pady=6)
-        ctk.CTkButton(f, text=t("Zapisz jako..."), width=110, command=lambda: browse_save(out_e)).grid(row=2, column=2, pady=6)
+        labeled_row(f, 2, "Folder wyjściowy:")
+        out_dir_e = ctk.CTkEntry(f)
+        out_dir_e.insert(0, get_default_save_dir())
+        out_dir_e.grid(row=2, column=1, sticky="ew", padx=6, pady=6)
+        ctk.CTkButton(f, text=t("Wybierz folder..."), width=130,
+                      command=lambda: browse_dir(out_dir_e)).grid(row=2, column=2, pady=6)
 
         def on_run():
-            if not in_e.get().strip() or not out_e.get().strip():
-                messagebox.showwarning(t("Brakuje danych"), t("Podaj plik wejściowy i wyjściowy."))
+            input_paths = flb.get_paths()
+            out_dir = out_dir_e.get().strip()
+            if not input_paths or not out_dir:
+                messagebox.showwarning(t("Brakuje danych"), t("Dodaj przynajmniej jeden plik i wybierz folder wyjściowy."))
                 return
-            output_path = resolve_output_path(out_e.get().strip())
-            app.run_async(lambda: media.normalize_audio(in_e.get().strip(), output_path),
-                          trigger_button=btn, on_success=lambda _: app.log(f"{t('Zapisano:')} {output_path}"),
-                          busy_text=t("Wyrównuję głośność..."))
+            os.makedirs(out_dir, exist_ok=True)
+            set_last_output_dir(out_dir)
+
+            def job(input_path):
+                base = os.path.splitext(os.path.basename(input_path))[0]
+                ext = os.path.splitext(input_path)[1]
+                output_path = os.path.join(out_dir, f"{base}_norm{ext}")
+                media.normalize_audio(input_path, output_path)
+                return output_path
+
+            app.run_batch_async(input_paths, job, trigger_button=btn,
+                                 busy_text=t("Wyrównuję głośność..."), notify_title=t("Wyrównywanie głośności zakończone"))
 
         btn = ctk.CTkButton(f, text=t("Wyrównaj głośność"), command=on_run)
         btn.grid(row=3, column=0, sticky="w", pady=(14, 0))
@@ -1664,26 +1734,12 @@ def build_media_page(parent, app):
     def build_compress(p):
         f = ctk.CTkFrame(p, fg_color="transparent")
         f.grid_columnconfigure(1, weight=1)
-        ctk.CTkLabel(f, text=t("Kompresuj wideo (mniejszy plik)"), font=ctk.CTkFont(weight="bold"))\
-            .grid(row=0, column=0, columnspan=3, sticky="w", pady=(0, 14))
+        ctk.CTkLabel(f, text=t("Kompresuj wideo (mniejszy plik) - można wybrać kilka plików naraz"),
+                     font=ctk.CTkFont(weight="bold")).grid(row=0, column=0, columnspan=3, sticky="w", pady=(0, 14))
 
-        labeled_row(f, 1, "Plik wideo:")
-        in_e = ctk.CTkEntry(f, placeholder_text=t("wybierz plik lub przeciągnij go tutaj..."))
-        in_e.grid(row=1, column=1, sticky="ew", padx=6, pady=6)
-
-        def on_input_selected(path):
-            in_e.delete(0, "end")
-            in_e.insert(0, path)
-            out_e.delete(0, "end")
-            out_e.insert(0, suggest_output(path, "_compressed"))
-
-        def on_browse():
-            path = filedialog.askopenfilename(filetypes=[(t("Wideo"), "*.mp4 *.avi *.mov *.webm *.mkv")])
-            if path:
-                on_input_selected(path)
-
-        ctk.CTkButton(f, text=t("Przeglądaj..."), width=110, command=on_browse).grid(row=1, column=2, pady=6)
-        enable_file_drop(in_e, lambda paths: on_input_selected(paths[0]))
+        labeled_row(f, 1, "Pliki wideo:")
+        flb = FileListBox(f, filetypes=[(t("Wideo"), "*.mp4 *.avi *.mov *.webm *.mkv")])
+        flb.grid(row=1, column=1, columnspan=2, sticky="ew", padx=6, pady=6)
 
         labeled_row(f, 2, "CRF (18-28, niżej = lepsza jakość):")
         crf_val = ctk.CTkLabel(f, text="28")
@@ -1693,19 +1749,32 @@ def build_media_page(parent, app):
         crf_slider.grid(row=2, column=1, sticky="ew", padx=6, pady=6)
         crf_val.grid(row=2, column=2, sticky="w")
 
-        labeled_row(f, 3, "Plik wyjściowy:")
-        out_e = ctk.CTkEntry(f)
-        out_e.grid(row=3, column=1, sticky="ew", padx=6, pady=6)
-        ctk.CTkButton(f, text=t("Zapisz jako..."), width=110, command=lambda: browse_save(out_e)).grid(row=3, column=2, pady=6)
+        labeled_row(f, 3, "Folder wyjściowy:")
+        out_dir_e = ctk.CTkEntry(f)
+        out_dir_e.insert(0, get_default_save_dir())
+        out_dir_e.grid(row=3, column=1, sticky="ew", padx=6, pady=6)
+        ctk.CTkButton(f, text=t("Wybierz folder..."), width=130,
+                      command=lambda: browse_dir(out_dir_e)).grid(row=3, column=2, pady=6)
 
         def on_run():
-            if not in_e.get().strip() or not out_e.get().strip():
-                messagebox.showwarning(t("Brakuje danych"), t("Podaj plik wejściowy i wyjściowy."))
+            input_paths = flb.get_paths()
+            out_dir = out_dir_e.get().strip()
+            if not input_paths or not out_dir:
+                messagebox.showwarning(t("Brakuje danych"), t("Dodaj przynajmniej jeden plik i wybierz folder wyjściowy."))
                 return
-            output_path = resolve_output_path(out_e.get().strip())
-            app.run_async(lambda: media.compress_video(in_e.get().strip(), output_path, crf=int(crf_slider.get())),
-                          trigger_button=btn, on_success=lambda _: app.log(f"{t('Zapisano:')} {output_path}"),
-                          busy_text=t("Kompresuję wideo..."))
+            os.makedirs(out_dir, exist_ok=True)
+            set_last_output_dir(out_dir)
+            crf = int(crf_slider.get())
+
+            def job(input_path):
+                base = os.path.splitext(os.path.basename(input_path))[0]
+                ext = os.path.splitext(input_path)[1]
+                output_path = os.path.join(out_dir, f"{base}_compressed{ext}")
+                media.compress_video(input_path, output_path, crf=crf)
+                return output_path
+
+            app.run_batch_async(input_paths, job, trigger_button=btn,
+                                 busy_text=t("Kompresuję wideo..."), notify_title=t("Kompresja wideo zakończona"))
 
         btn = ctk.CTkButton(f, text=t("Kompresuj"), command=on_run)
         btn.grid(row=4, column=0, sticky="w", pady=(14, 0))
@@ -1714,28 +1783,15 @@ def build_media_page(parent, app):
     def build_extract_mp3(p):
         f = ctk.CTkFrame(p, fg_color="transparent")
         f.grid_columnconfigure(1, weight=1)
-        ctk.CTkLabel(f, text=t("Wideo/audio → MP3 (opcjonalnie tylko fragment)"), font=ctk.CTkFont(weight="bold"))\
-            .grid(row=0, column=0, columnspan=3, sticky="w", pady=(0, 14))
+        ctk.CTkLabel(f, text=t("Wideo/audio → MP3 (opcjonalnie tylko fragment) - można wybrać kilka plików naraz, "
+                                "zakres czasu zastosuje się do wszystkich"),
+                     font=ctk.CTkFont(weight="bold")).grid(row=0, column=0, columnspan=3, sticky="w", pady=(0, 14))
 
-        labeled_row(f, 1, "Plik wejściowy:")
-        in_e = ctk.CTkEntry(f, placeholder_text=t("wybierz plik lub przeciągnij go tutaj..."))
-        in_e.grid(row=1, column=1, sticky="ew", padx=6, pady=6)
-
-        def on_input_selected(path):
-            in_e.delete(0, "end")
-            in_e.insert(0, path)
-            out_e.delete(0, "end")
-            out_e.insert(0, suggest_output(path, "", ".mp3"))
-
-        def on_browse():
-            exts = sorted(media.AUDIO_EXTS | media.VIDEO_EXTS)
-            path = filedialog.askopenfilename(
-                filetypes=[(t("Wideo/Audio"), " ".join(f"*{e}" for e in exts)), (t("Wszystkie pliki"), "*.*")])
-            if path:
-                on_input_selected(path)
-
-        ctk.CTkButton(f, text=t("Przeglądaj..."), width=110, command=on_browse).grid(row=1, column=2, pady=6)
-        enable_file_drop(in_e, lambda paths: on_input_selected(paths[0]))
+        labeled_row(f, 1, "Pliki wejściowe:")
+        exts = sorted(media.AUDIO_EXTS | media.VIDEO_EXTS)
+        flb = FileListBox(f, filetypes=[(t("Wideo/Audio"), " ".join(f"*{e}" for e in exts)),
+                                         (t("Wszystkie pliki"), "*.*")])
+        flb.grid(row=1, column=1, columnspan=2, sticky="ew", padx=6, pady=6)
 
         labeled_row(f, 2, "Początek (opcjonalnie):")
         start_e = ctk.CTkEntry(f, placeholder_text=t("puste = od początku, np. 00:00:10"))
@@ -1745,16 +1801,18 @@ def build_media_page(parent, app):
         end_e = ctk.CTkEntry(f, placeholder_text=t("puste = do końca, np. 00:01:30"))
         end_e.grid(row=3, column=1, sticky="ew", padx=6, pady=6)
 
-        labeled_row(f, 4, "Plik wyjściowy (.mp3):")
-        out_e = ctk.CTkEntry(f)
-        out_e.grid(row=4, column=1, sticky="ew", padx=6, pady=6)
-        ctk.CTkButton(f, text=t("Zapisz jako..."), width=110,
-                      command=lambda: browse_save(out_e, ".mp3", [("MP3", "*.mp3")])).grid(row=4, column=2, pady=6)
+        labeled_row(f, 4, "Folder wyjściowy:")
+        out_dir_e = ctk.CTkEntry(f)
+        out_dir_e.insert(0, get_default_save_dir())
+        out_dir_e.grid(row=4, column=1, sticky="ew", padx=6, pady=6)
+        ctk.CTkButton(f, text=t("Wybierz folder..."), width=130,
+                      command=lambda: browse_dir(out_dir_e)).grid(row=4, column=2, pady=6)
 
         def on_run():
-            input_path, raw_output = in_e.get().strip(), out_e.get().strip()
-            if not input_path or not raw_output:
-                messagebox.showwarning(t("Brakuje danych"), t("Podaj plik wejściowy i wyjściowy."))
+            input_paths = flb.get_paths()
+            out_dir = out_dir_e.get().strip()
+            if not input_paths or not out_dir:
+                messagebox.showwarning(t("Brakuje danych"), t("Dodaj przynajmniej jeden plik i wybierz folder wyjściowy."))
                 return
             start, end = start_e.get().strip() or None, end_e.get().strip() or None
             try:
@@ -1765,10 +1823,17 @@ def build_media_page(parent, app):
             except ValueError:
                 messagebox.showwarning(t("Zły format czasu"), t("Początek/koniec podaj jako HH:MM:SS albo w sekundach."))
                 return
-            output_path = resolve_output_path(raw_output)
-            app.run_async(lambda: media.extract_audio_clip(input_path, output_path, start=start, end=end),
-                          trigger_button=btn, on_success=lambda _: app.log(f"{t('Zapisano:')} {output_path}"),
-                          busy_text=t("Wyciągam dźwięk (MP3)..."))
+            os.makedirs(out_dir, exist_ok=True)
+            set_last_output_dir(out_dir)
+
+            def job(input_path):
+                base = os.path.splitext(os.path.basename(input_path))[0]
+                output_path = os.path.join(out_dir, f"{base}.mp3")
+                media.extract_audio_clip(input_path, output_path, start=start, end=end)
+                return output_path
+
+            app.run_batch_async(input_paths, job, trigger_button=btn,
+                                 busy_text=t("Wyciągam dźwięk (MP3)..."), notify_title=t("Wyciąganie MP3 zakończone"))
 
         btn = ctk.CTkButton(f, text=t("Wyciągnij MP3"), command=on_run)
         btn.grid(row=5, column=0, sticky="w", pady=(14, 0))
@@ -1845,9 +1910,13 @@ def build_documents_page(parent, app):
             output_dir = resolve_output_path(out_e.get().strip())
             def do():
                 return documents.split_pdf(in_e.get().strip(), output_dir)
-            app.run_async(do, trigger_button=btn,
-                          on_success=lambda paths: app.log(t("Zapisano {n} stron -> {d}").format(n=len(paths), d=output_dir)),
-                          busy_text=t("Rozdzielam PDF..."))
+
+            def on_split_done(paths):
+                summary = t("Zapisano {n} stron -> {d}").format(n=len(paths), d=output_dir)
+                app.log(summary)
+                notify(t("Dzielenie PDF zakończone"), summary)
+
+            app.run_async(do, trigger_button=btn, on_success=on_split_done, busy_text=t("Rozdzielam PDF..."))
 
         btn = ctk.CTkButton(f, text=t("Rozdziel na strony"), command=on_run)
         btn.grid(row=3, column=0, sticky="w", pady=(14, 0))
@@ -1895,7 +1964,7 @@ def build_documents_page(parent, app):
             output_path = resolve_output_path(out_e.get().strip())
             app.run_async(lambda: documents.rotate_pdf(in_e.get().strip(), output_path,
                                                         degrees=int(degrees_menu.get())),
-                          trigger_button=btn, on_success=lambda _: app.log(f"{t('Zapisano:')} {output_path}"),
+                          trigger_button=btn, on_success=lambda _: log_and_notify(app, output_path, t("Obracanie zakończone")),
                           busy_text=t("Obracam strony..."))
 
         btn = ctk.CTkButton(f, text=t("Obróć"), command=on_run)
@@ -1975,7 +2044,7 @@ def build_documents_page(parent, app):
             output_path = resolve_output_path(out_e.get().strip())
             app.run_async(lambda: documents.ocr_pdf_to_text(in_e.get().strip(), output_path,
                                                               lang=lang_e.get().strip() or "pol+eng"),
-                          trigger_button=btn, on_success=lambda _: app.log(f"{t('Zapisano:')} {output_path}"),
+                          trigger_button=btn, on_success=lambda _: log_and_notify(app, output_path, t("OCR zakończony")),
                           busy_text=t("Rozpoznaję tekst (OCR)..."))
 
         btn = ctk.CTkButton(f, text=t("Rozpoznaj tekst"), command=on_run)
@@ -2202,20 +2271,25 @@ def build_download_page(parent, app):
 
         def hook(d):
             status = d.get("status")
+            fraction = None
             if status == "downloading":
                 total = d.get("total_bytes") or d.get("total_bytes_estimate")
                 downloaded = d.get("downloaded_bytes") or 0
                 if total:
-                    text = t("Pobieram... {pct}%").format(pct=f"{downloaded / total * 100:.0f}")
+                    fraction = downloaded / total
+                    text = t("Pobieram... {pct}%").format(pct=f"{fraction * 100:.0f}")
                 else:
                     text = t("Pobieram... {mb} MB").format(mb=f"{downloaded / 1_048_576:.1f}")
                 speed = d.get("speed")
                 if speed:
                     text += f" ({speed / 1_048_576:.1f} MB/s)"
             elif status == "finished":
+                # Etap łączenia wideo+audio przez ffmpeg nie ma znanego % - pasek
+                # wraca do animowanej kreski zamiast zamrożonego na 100%.
                 text = t("Przetwarzam (łączę wideo+audio / konwertuję)...")
             else:
                 return
+            app.after(0, lambda v=fraction: app.set_progress(v))
             if text != last_shown[0]:
                 last_shown[0] = text
                 app.after(0, lambda t=text: app.status_label.configure(text=t))
@@ -2240,7 +2314,7 @@ def build_download_page(parent, app):
                 app.log(t("⚠ YouTube zablokował pobieranie w wyższej jakości i ograniczył ten "
                         "film do {h}p mimo wyboru {q} (zwykle dotyczy mocno "
                         "chronionych/oficjalnych teledysków).").format(h=height, q=quality_menu.get()))
-            app.log(f"{t('Zapisano:')} {final_path}")
+            log_and_notify(app, final_path, t("Pobieranie zakończone"))
 
         app.log(t("Pobieram {u} -> {o}").format(u=url, o=output_path))
         app.run_async(

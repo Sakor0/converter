@@ -73,6 +73,23 @@ Interfejs jest dwujęzyczny - przełącznik **PL/EN** na górze panelu bocznego
 zmienia język całego okna od razu, bez zamykania i ponownego uruchamiania
 programu (trwające pobieranie/konwersja w tle nie są przerywane).
 
+Zakładki **Konwersja**, **Obrazy → Zmień rozmiar / Usuń EXIF** oraz
+**Audio / Wideo → Wideo → MP3 / Wideo → GIF / Wyrównaj głośność / Kompresuj**
+pozwalają wybrać kilka plików naraz (ta sama lista z dodawaniem/przeciąganiem co
+w Merge PDF/Pack) - te same ustawienia (format, rozmiar, FPS, CRF...) zastosują
+się do wszystkich, a każdy plik zapisze się pod swoją nazwą w jednym wskazanym
+folderze wyjściowym. Błąd pojedynczego pliku w partii (np. niepasujący format)
+nie przerywa reszty - trafia do logu, a pozostałe pliki i tak się przetworzą.
+(Zakładka Przytnij/Trim zostaje jednoosobowa - zakres cięcia i podgląd są
+z natury przypisane do jednego, konkretnego pliku.)
+
+Pasek postępu pokazuje realny procent zamiast tylko animowanej kreski wszędzie
+tam, gdzie da się go policzyć - partia plików (i/n) i pobieranie z linku
+(% pobranych bajtów). Po zakończeniu dłuższej operacji (partia plików,
+pobieranie, OCR, dzielenie/obracanie PDF, przycinanie) leci też powiadomienie
+systemowe (dymek przy zegarze) - przydatne, jeśli akurat zminimalizujesz okno
+na dłuższą chwilę.
+
 Zakładka **Audio / Wideo → Wideo → MP3** wyciąga samą ścieżkę dźwiękową jako
 MP3 z dowolnego pliku wideo/audio, opcjonalnie tylko z wybranego fragmentu
 (pola Początek/Koniec można zostawić puste, żeby wziąć cały plik) - szybszy
@@ -113,11 +130,14 @@ zaznacz "Użyj ciasteczek z przeglądarki" i wybierz, z której (Chrome/Edge/Fir
 z tych serwisów łamie ich regulaminy nawet do użytku prywatnego - to Twoja decyzja,
 czy i co pobierasz.(aktualnie filmiki z yt mogą być pobieranie z maksymalną rozdzielczością 360p) 
 
-Jeśli w polu "Plik wyjściowy" wpiszesz samą nazwę (bez folderu), program zapisze
-wynik w ostatnio używanym folderze, a jeśli żadnego jeszcze nie było - na Pulpicie.
-Ostatnio użyty folder jest zapamiętywany trwale (w `%APPDATA%\local_converter\settings.json`
-na Windows), więc zostaje zapamiętany także po zamknięciu i ponownym uruchomieniu
-programu - osobno dla każdego komputera, na którym go uruchomisz.
+Domyślny folder zapisu (pole "Plik wyjściowy" z samą nazwą, bez ścieżki, albo
+"Folder wyjściowy" w zakładkach z partią plików) to folder Pobrane, a po
+pierwszym zapisie - ostatnio używany folder. Jest on zapamiętywany trwale
+(w `%APPDATA%\local_converter\settings.json` na Windows), więc zostaje
+zapamiętany także po zamknięciu i ponownym uruchomieniu programu - osobno dla
+każdego komputera, na którym go uruchomisz. Okno "Zapisz jako..." otwiera się
+od razu z podpowiedzianą nazwą pliku wpisaną - wystarczy ją poprawić/dopisać
+zamiast pisać od zera.
 
 ## Instalacja
 

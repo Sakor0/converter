@@ -39,6 +39,9 @@ EN = {
     # --- wspolne / labeled_row ---
     "Plik wejściowy:": "Input file:",
     "Plik wyjściowy:": "Output file:",
+    "Pliki wejściowe:": "Input files:",
+    "Pliki wideo:": "Video files:",
+    "Pliki audio:": "Audio files:",
     "Format wyjściowy:": "Output format:",
     "Jakość (JPG/WEBP):": "Quality (JPG/WEBP):",
     "Szerokość (px):": "Width (px):",
@@ -68,6 +71,10 @@ EN = {
     "Wybierz folder...": "Choose folder...",
     "Brakuje danych": "Missing data",
     "Podaj plik wejściowy i wyjściowy.": "Provide an input and output file.",
+    "Dodaj przynajmniej jeden plik i wybierz folder wyjściowy.": "Add at least one file and choose an output folder.",
+    "Wybierz folder wyjściowy.": "Choose an output folder.",
+    "Gotowe: {ok}/{total} plików.": "Done: {ok}/{total} files.",
+    "Gotowe: {ok}/{total} plików (błędy: {err}).": "Done: {ok}/{total} files (errors: {err}).",
     "wybierz plik lub przeciągnij go tutaj...": "choose a file or drag it here...",
     "Wszystkie pliki": "All files",
     "Zapisano:": "Saved:",
@@ -92,25 +99,34 @@ EN = {
 
     # --- Konwersja ---
     "Konwersja ogólna (format rozpoznawany po rozszerzeniu)": "General conversion (format detected from extension)",
-    "Obrazy, audio/wideo, PDF↔DOCX, CSV/JSON/XLSX/YAML - jedna komenda.":
-        "Images, audio/video, PDF↔DOCX, CSV/JSON/XLSX/YAML - one command.",
-    "nazwa uzupełni się sama po wyborze formatu wyżej": "name will fill in automatically once you pick a format above",
-    "- wybierz plik wejściowy -": "- choose an input file -",
+    "Obrazy, audio/wideo, PDF↔DOCX, CSV/JSON/XLSX/YAML - jedna komenda. "
+    "Można dodać kilka plików naraz - ten sam format wyjściowy trafi do wszystkich.":
+        "Images, audio/video, PDF↔DOCX, CSV/JSON/XLSX/YAML - one command. "
+        "You can add several files at once - the same output format is applied to all of them.",
+    "- wybierz pliki wejściowe -": "- choose input files -",
     "(brak obsługiwanej konwersji dla tego pliku)": "(no supported conversion for this file)",
+    "Dodaj przynajmniej jeden plik i wybierz format wyjściowy.": "Add at least one file and choose an output format.",
+    "Konwersja zakończona": "Conversion finished",
     "Konwertuję...": "Converting...",
     "Konwertuj": "Convert",
 
     # --- Obrazy ---
-    "Zmień rozmiar obrazu (proporcje zachowane, jeśli podasz tylko jeden wymiar)":
-        "Resize an image (aspect ratio kept if you only give one dimension)",
+    "Zmień rozmiar obrazu (proporcje zachowane, jeśli podasz tylko jeden wymiar) - "
+    "można wybrać kilka plików naraz":
+        "Resize an image (aspect ratio kept if you only give one dimension) - "
+        "you can choose several files at once",
     "np. 1280": "e.g. 1280",
     "zostaw puste, by zachować proporcje": "leave empty to keep aspect ratio",
     "Podaj szerokość lub wysokość.": "Provide a width or height.",
     "Zmieniam rozmiar...": "Resizing...",
+    "Zmiana rozmiaru zakończona": "Resizing finished",
     "Zmień rozmiar": "Resize",
-    "Usuń metadane EXIF (GPS, model telefonu, data) przed wysłaniem zdjęcia":
-        "Strip EXIF metadata (GPS, phone model, date) before sharing a photo",
+    "Usuń metadane EXIF (GPS, model telefonu, data) przed wysłaniem zdjęcia - "
+    "można wybrać kilka plików naraz":
+        "Strip EXIF metadata (GPS, phone model, date) before sharing a photo - "
+        "you can choose several files at once",
     "Usuwam metadane...": "Stripping metadata...",
+    "Usuwanie metadanych zakończone": "Metadata stripping finished",
     "Usuń EXIF": "Strip EXIF",
 
     # --- Audio/Wideo: Trim ---
@@ -160,29 +176,40 @@ EN = {
     "Przycinam i miksuję ścieżki (ffmpeg)...": "Trimming and mixing tracks (ffmpeg)...",
     "Przycinanie {i} [{s} -> {e}] -> {o}": "Trimming {i} [{s} -> {e}] -> {o}",
     "Przycinam plik (ffmpeg)...": "Trimming file (ffmpeg)...",
+    "Przycinanie zakończone": "Trimming finished",
     "wybierz plik, żeby zobaczyć przebieg fali": "choose a file to see the waveform",
     "brak podglądu ścieżki dźwiękowej": "no audio waveform preview",
 
     # --- Audio/Wideo: MP3 / GIF / normalize / compress ---
-    "Wideo/audio → MP3 (opcjonalnie tylko fragment)": "Video/audio → MP3 (optionally just a clip)",
+    "Wideo/audio → MP3 (opcjonalnie tylko fragment) - można wybrać kilka plików naraz, "
+    "zakres czasu zastosuje się do wszystkich":
+        "Video/audio → MP3 (optionally just a clip) - you can choose several files at once, "
+        "the time range applies to all of them",
     "puste = od początku, np. 00:00:10": "empty = from the start, e.g. 00:00:10",
     "puste = do końca, np. 00:01:30": "empty = to the end, e.g. 00:01:30",
     "Zły format czasu": "Bad time format",
     "Początek/koniec podaj jako HH:MM:SS albo w sekundach.": "Give start/end as HH:MM:SS or in seconds.",
     "Wyciągam dźwięk (MP3)...": "Extracting audio (MP3)...",
+    "Wyciąganie MP3 zakończone": "MP3 extraction finished",
     "Wyciągnij MP3": "Extract MP3",
     "Przytnij (Trim)": "Trim",
     "Wideo → MP3": "Video → MP3",
     "Wideo → GIF": "Video → GIF",
-    "Wideo → animowany GIF": "Video → animated GIF",
+    "Wideo → animowany GIF - można wybrać kilka plików naraz":
+        "Video → animated GIF - you can choose several files at once",
     "Generuję GIF...": "Generating GIF...",
+    "Generowanie GIF-ów zakończone": "GIF generation finished",
     "Konwertuj na GIF": "Convert to GIF",
     "Wyrównaj głośność": "Normalize volume",
-    "Wyrównaj głośność nagrania (EBU R128 loudnorm)": "Normalize recording volume (EBU R128 loudnorm)",
+    "Wyrównaj głośność nagrania (EBU R128 loudnorm) - można wybrać kilka plików naraz":
+        "Normalize recording volume (EBU R128 loudnorm) - you can choose several files at once",
     "Wyrównuję głośność...": "Normalizing volume...",
+    "Wyrównywanie głośności zakończone": "Volume normalization finished",
     "Kompresuj wideo": "Compress video",
-    "Kompresuj wideo (mniejszy plik)": "Compress video (smaller file)",
+    "Kompresuj wideo (mniejszy plik) - można wybrać kilka plików naraz":
+        "Compress video (smaller file) - you can choose several files at once",
     "Kompresuję wideo...": "Compressing video...",
+    "Kompresja wideo zakończona": "Video compression finished",
     "Kompresuj": "Compress",
 
     # --- Dokumenty (PDF) ---
@@ -195,10 +222,12 @@ EN = {
     "Podaj plik PDF i folder wyjściowy.": "Provide a PDF file and an output folder.",
     "Zapisano {n} stron -> {d}": "Saved {n} pages -> {d}",
     "Rozdzielam PDF...": "Splitting PDF...",
+    "Dzielenie PDF zakończone": "PDF splitting finished",
     "Rozdziel na strony": "Split into pages",
     "Rozdziel PDF": "Split PDF",
     "Obróć strony PDF": "Rotate PDF pages",
     "Obracam strony...": "Rotating pages...",
+    "Obracanie zakończone": "Rotation finished",
     "Obróć": "Rotate",
     "Obróć PDF": "Rotate PDF",
     "Połącz obrazy w jeden PDF (kolejność jak na liście)": "Merge images into one PDF (order as in the list)",
@@ -209,6 +238,7 @@ EN = {
     "OCR - wyciągnij tekst ze skanu PDF (wymaga Tesseract + Poppler)":
         "OCR - extract text from a scanned PDF (requires Tesseract + Poppler)",
     "Rozpoznaję tekst (OCR)...": "Recognizing text (OCR)...",
+    "OCR zakończony": "OCR finished",
     "Rozpoznaj tekst": "Recognize text",
 
     # --- Archiwa ---
@@ -259,6 +289,7 @@ EN = {
     "Pobieram {u} -> {o}": "Downloading {u} -> {o}",
     "Pobieram (może to chwilę potrwać, w zależności od długości i jakości)...":
         "Downloading (this may take a while, depending on length and quality)...",
+    "Pobieranie zakończone": "Download finished",
     "⬇ Pobierz": "⬇ Download",
 
     # --- FileListBox ---
