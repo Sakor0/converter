@@ -20,7 +20,16 @@ from datetime import datetime
 from tkinter import filedialog, messagebox
 
 import customtkinter as ctk
-import vlc
+# Gdy VLC Media Player nie jest zainstalowany w systemie, samo "import vlc"
+# (nie tylko vlc.Instance(...)) od razu rzuca wyjątkiem szukając libvlc.dll -
+# w spakowanej .exe (PyInstaller) ten wyjątek wywala CAŁY program na starcie,
+# zamiast ładnie zdegradować tylko podgląd/odtwarzanie w zakładce Trim (patrz
+# istniejący try/except wokół VideoPlayer(...) niżej, który już to obsługuje -
+# ale tylko jeśli "vlc" w ogóle się zaimportuje).
+try:
+    import vlc
+except Exception:
+    vlc = None
 from tkinterdnd2 import DND_FILES, TkinterDnD
 
 from converters import images, media, documents, data as data_mod, archives, download as download_mod
